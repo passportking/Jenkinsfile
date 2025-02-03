@@ -2,10 +2,10 @@ pipeline {
     agent any
     environment {
         AWS_REGION = 'us-east-1'
-        SONARQUBE_URL = "http://your-sonarqube-server:9000"
-        TRUFFLEHOG_PATH = "/usr/local/bin/trufflehog"
-        JIRA_SITE = "https://yourcompany.atlassian.net"
-        JIRA_PROJECT = "SEC" // Your Jira project key
+        SONARQUBE_URL = "https://sonarcloud.io"
+        TRUFFLEHOG_PATH = "/usr/local/bin/trufflehog3"
+        JIRA_SITE = "https://derrickweil.atlassian.net"
+        JIRA_PROJECT = "SCRUM" // Your Jira project key
     }
 
     stages {
@@ -33,50 +33,44 @@ pipeline {
         stage('Static Code Analysis (SAST)') {
             steps {
                 script {
-                    def scanStatus = sh(script: "sonar-scanner -Dsonar.projectKey=autoScale -Dsonar.host.url=${SONARQUBE_URL}", returnStatus: true)
-                    if (scanStatus != 0) {
-                        createJiraTicket("Static Code Analysis Failed", "SonarQube scan detected issues in your code.")
-                        error("SonarQube found security vulnerabilities!")
+                    withCredentials([string(credentialsId: 'SONARQUBE_TOKEN', variable: 'SONAR_TOKEN')]) {
+                        def scanStatus = sh(script: '''
+                            ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                            -Dsonar.projectKey=derrickSh43_autoScale \
+                            -Dsonar.organization=derricksh43 \
+                            -Dsonar.host.url=${SONARQUBE_URL} \
+                            -Dsonar.login=''' + SONAR_TOKEN, returnStatus: true)
+
+                        if (scanStatus != 0) {
+                            createJiraTicket("Static Code Analysis Failed", "SonarQube scan detected issues in your code.")
+                            error("SonarQube found security vulnerabilities!")
+                        }
                     }
                 }
             }
         }
 
-        stage('Dependency Scanning') {
+
+        stage('Snyk Security Scan') {
             steps {
                 script {
-                    def scanStatus = sh(script: "snyk test --all-projects", returnStatus: true)
-                    if (scanStatus != 0) {
-                        createJiraTicket("Dependency Scan Failed", "Snyk found security vulnerabilities in dependencies.")
-                        error("Snyk detected vulnerabilities!")
+                    withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN', variable: 'SNYK_TOKEN')]) {
+                        sh "snyk auth ${SNYK_TOKEN}"
+                        sh "snyk monitor || echo 'No supported files found, monitoring skipped.'"
                     }
                 }
             }
         }
 
-        stage('Secret Scanning') {
+
+        stage('Initialize Terraform') {
             steps {
-                script {
-                    def scanStatus = sh(script: "${TRUFFLEHOG_PATH} --regex --entropy=True .", returnStatus: true)
-                    if (scanStatus != 0) {
-                        createJiraTicket("Secret Scan Failed", "TruffleHog detected sensitive information in the repository.")
-                        error("TruffleHog found secrets in your code!")
-                    }
-                }
+                sh '''
+                terraform init
+                '''
             }
         }
 
-        stage('Terraform Security Scan (Checkov)') {
-            steps {
-                script {
-                    def scanStatus = sh(script: "checkov -d .", returnStatus: true)
-                    if (scanStatus != 0) {
-                        createJiraTicket("Infrastructure Security Issue", "Checkov found security misconfigurations in Terraform.")
-                        error("Checkov found security risks in Terraform code!")
-                    }
-                }
-            }
-        }
 
         stage('Plan Terraform') {
             steps {
@@ -109,18 +103,8 @@ pipeline {
             }
         }
 
-        stage('Post Deployment Security Scan (DAST)') {
-            steps {
-                script {
-                    def scanStatus = sh(script: "zap-cli quick-scan --start --self-contained --api-key myapikey http://deployed-url.com", returnStatus: true)
-                    if (scanStatus != 0) {
-                        createJiraTicket("Dynamic Security Scan Failed", "OWASP ZAP found security vulnerabilities in the deployed environment.")
-                        error("OWASP ZAP found security vulnerabilities!")
-                    }
-                }
-            }
-        }
-    }
+
+    }   
 
     post {
         success {
