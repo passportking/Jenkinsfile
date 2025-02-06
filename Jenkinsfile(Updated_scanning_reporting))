@@ -5,6 +5,7 @@ pipeline {
         SONARQUBE_URL = "<SONARCLOUD_URL>" // e.g., "https://sonarcloud.io"
         JIRA_SITE = "<JIRA_SITE_URL>" // e.g., "https://yourcompany.atlassian.net"
         JIRA_PROJECT = "<JIRA_PROJECT_KEY>" // e.g., "DEVOPS", "SECURITY", "SCRUM"
+        JIRA_TOKEN = credentials('<JIRA_API_TOKEN>') // Use Jenkins credentials
     }
 }
 
@@ -96,6 +97,33 @@ stage('Snyk Security Scan') {
         }
     }
 }
+
+  stage('Aqua Trivy Security Scan') {
+            steps {
+                script {
+                    // Run Trivy IaC scan on Terraform files
+                    def trivyScanStatus = sh(script: '''
+                        trivy iac --format json --output trivy-report.json .
+                    ''', returnStatus: true)
+
+                    // Extract Trivy scan results
+                    def trivyIssues = sh(script: '''
+                        jq -r '.Results[].Misconfigurations[]?.Description' trivy-report.json || echo "No issues found"
+                    ''', returnStdout: true).trim()
+
+                    // If vulnerabilities are found, create a Jira ticket
+                    if (trivyScanStatus != 0 && trivyIssues != "No issues found") {
+                        def issueDescription = """ 
+                            **Aqua Trivy Security Issues:**
+                            ${trivyIssues}
+                        """.stripIndent()
+                        
+                        createJiraTicket("Trivy Security Vulnerabilities Detected", issueDescription)
+                        error("Trivy found security vulnerabilities in Terraform files!")
+                    }
+                }
+            }
+        }
 
 
 
