@@ -34,7 +34,6 @@ pipeline {
             }
         }
 
-
         stage('Static Code Analysis (SAST)') {
             steps {
                 script {
@@ -72,9 +71,6 @@ pipeline {
             }
         }
 
-
-
-
         stage('Snyk Security Scan') {
             steps {
                 script {
@@ -111,10 +107,6 @@ pipeline {
             }
         }
 
-
-
-
-
         stage('Aqua Trivy Security Scan') {
             steps {
                 script {
@@ -144,7 +136,6 @@ pipeline {
                 }
             }
         }
-
 
         stage('Initialize Terraform') {
             steps {
@@ -241,8 +232,3 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         }
     }
 }
-
-
-
-
-
